@@ -14,6 +14,7 @@ log.info """\
     qsr truth vcfs  : ${params.qsrVcfs}
     output directory: ${params.outdir}
     fastqc          : ${params.fastqc}
+    fastp           : ${params.fastp}
     aligner         : ${params.aligner}
     variant caller  : ${params.variant_caller}
     bqsr            : ${params.bqsr}
@@ -29,6 +30,9 @@ if (params.index_genome) {
 }
 if (params.fastqc) {
     include { FASTQC } from './modules/FASTQC'
+}
+if (params.fastp) {
+    include { fastp } from './modules/fastp'
 }
 include { sortBam } from './modules/sortBam'
 include { markDuplicates } from './modules/markDuplicates'
@@ -80,23 +84,45 @@ workflow {
 
     // Set channel to gather read_pairs
     read_pairs_ch = Channel
-        .fromPath(params.samplesheet)
-        .splitCsv(sep: '\t')
-        .map { row ->
-            if (row.size() == 4) {
-                tuple(row[0], [row[1], row[2]])
-            } else if (row.size() == 3) {
-                tuple(row[0], [row[1]])
-            } else {
-                error "Unexpected row format in samplesheet: $row"
-            }
-        }
+    .fromPath(params.samplesheet)
+    .splitCsv(sep: '\t')
+    .map { row ->
+
+        def sample_id = row[0]
+        def files = row[1..-1]
+
+        // Ensure deterministic ordering
+        files = files.sort()
+
+        // Explicitly assign R1 and R2
+        def r1 = files.find { it.contains('_R1') || it.contains('_1') }
+        def r2 = files.find { it.contains('_R2') || it.contains('_2') }
+
+        if (!r1)
+            error "R1 not found for sample ${sample_id}"
+
+        if (files.size() == 2 && !r2)
+            error "R2 not found for sample ${sample_id}"
+
+        return tuple(sample_id, r2 ? [file(r1), file(r2)] : [file(r1)])
+    }
     read_pairs_ch.view()
+
+    // Decide which reads to use for FASTQC based on whether fastp is enabled
+    reads_for_fastqc_ch = read_pairs_ch
+
+    // Run fastp on read pairs
+    if (params.fastp) {
+        fastp_out = fastp(read_pairs_ch)
+        reads_for_fastqc_ch = fastp_out
+    }
 
     // Run FASTQC on read pairs
     if (params.fastqc) {
-        FASTQC(read_pairs_ch)
+        FASTQC(reads_for_fastqc_ch)
     }
+
+    return
 
     // Align reads to the indexed genome
     if (params.aligner == 'bwa-mem') {
