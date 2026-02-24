@@ -18,9 +18,9 @@
 
     // Name outputs using emit so they are output in separate channels and can be referenced easily in the workflow
     output:
-    tuple val(sample_id), path("trimmed_${sample_id}_R*.fastq.gz") emit: trimmed_reads
-    path "fastp_${sample_id}.html" emit: html
-    path "fastp_${sample_id}.json" emit: json
+    tuple val(sample_id), path("trimmed_${sample_id}_R*.fastq.gz"), emit: trimmed_reads
+    path "fastp_${sample_id}.html", emit: html
+    path "fastp_${sample_id}.json", emit: json
 
     script:
 
@@ -50,6 +50,4 @@
         echo "fastp complete with single-end reads for sample ${sample_id}"
         """
     }
-
-    echo "fastp complete for sample ${sample_id}"
 }

@@ -88,33 +88,26 @@ workflow {
     .splitCsv(sep: '\t')
     .map { row ->
 
-        // Extract sample ID and read filepaths from the row
+        // Extract sample ID from first column
         def sample_id = row[0]
-        def read_files = row[1..-1].sort()
 
-        // Handle single-end reads
-        if (read_files.size() == 1) {
-            def r1 = file(read_files[0])
-            return tuple(sample_id, [r1])
-        }
+        // Take first read column (R1), trimming spaces.
+        def r1_path = row[1]?.trim()
+        // Take second read column (R2) if it exists, trimming spaces. If single-end then becomes null
+        def r2_path = row.size() > 2 ? row[2]?.trim() : null
 
-        // Handle paired-end reads
-        else if (read_files.size() == 2) {
-        // Explicitly assign R1 and R2 by checking filenames
-            def r1 = read_files.find { it.contains('_R1') || it.contains('_1') }
-            def r2 = read_files.find { it.contains('_R2') || it.contains('_2') }
+        if (!r1_path)
+            error "R1 file not found in samplesheet for sample ${sample_id}"
 
-            if (!r1 || !r2)
-                error "Paired-end sample ${sample_id} does not have proper R1/R2 naming"
-
-            return tuple(sample_id, [file(r1), file(r2)])
-        }
-
-        else {
-            error "Sample ${sample_id} has ${read_files.size()} read files — expected 1 or 2"
+        // Selective return based on whether R2 exists (i.e. paired or single-end)
+        if (r2_path) {
+            // Paired-end
+            return tuple(sample_id, [file(r1_path), file(r2_path)])
+        } else {
+            // Single-end
+            return tuple(sample_id, [file(r1_path)])
         }
     }
-
     read_pairs_ch.view()
 
     // Run fastp on read pairs
@@ -127,7 +120,7 @@ workflow {
         FASTQC(read_pairs_ch)
     }
 
-    return
+    return 
 
     // Align reads to the indexed genome
     if (params.aligner == 'bwa-mem') {
