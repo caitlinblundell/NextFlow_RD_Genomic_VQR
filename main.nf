@@ -88,38 +88,43 @@ workflow {
     .splitCsv(sep: '\t')
     .map { row ->
 
+        // Extract sample ID and read filepaths from the row
         def sample_id = row[0]
-        def files = row[1..-1]
+        def read_files = row[1..-1].sort()
 
-        // Ensure deterministic ordering
-        files = files.sort()
+        // Handle single-end reads
+        if (read_files.size() == 1) {
+            def r1 = file(read_files[0])
+            return tuple(sample_id, [r1])
+        }
 
-        // Explicitly assign R1 and R2
-        def r1 = files.find { it.contains('_R1') || it.contains('_1') }
-        def r2 = files.find { it.contains('_R2') || it.contains('_2') }
+        // Handle paired-end reads
+        else if (read_files.size() == 2) {
+        // Explicitly assign R1 and R2 by checking filenames
+            def r1 = read_files.find { it.contains('_R1') || it.contains('_1') }
+            def r2 = read_files.find { it.contains('_R2') || it.contains('_2') }
 
-        if (!r1)
-            error "R1 not found for sample ${sample_id}"
+            if (!r1 || !r2)
+                error "Paired-end sample ${sample_id} does not have proper R1/R2 naming"
 
-        if (files.size() == 2 && !r2)
-            error "R2 not found for sample ${sample_id}"
+            return tuple(sample_id, [file(r1), file(r2)])
+        }
 
-        return tuple(sample_id, r2 ? [file(r1), file(r2)] : [file(r1)])
+        else {
+            error "Sample ${sample_id} has ${read_files.size()} read files — expected 1 or 2"
+        }
     }
-    read_pairs_ch.view()
 
-    // Decide which reads to use for FASTQC based on whether fastp is enabled
-    reads_for_fastqc_ch = read_pairs_ch
+    read_pairs_ch.view()
 
     // Run fastp on read pairs
     if (params.fastp) {
-        fastp_out = fastp(read_pairs_ch)
-        reads_for_fastqc_ch = fastp_out
+        fastp(read_pairs_ch)
     }
 
     // Run FASTQC on read pairs
     if (params.fastqc) {
-        FASTQC(reads_for_fastqc_ch)
+        FASTQC(read_pairs_ch)
     }
 
     return
