@@ -4,7 +4,7 @@
 
  process fastp {
 
-    // Use biocontainer fastp docker image
+    // Use bioconda fastp docker image
     container 'community.wave.seqera.io/library/fastp:1.1.0--08aa7c5662a30d57'
 
     // Add a tag to identify the process

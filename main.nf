@@ -54,6 +54,9 @@ if (params.aligner == 'bwa-mem') {
     include { alignReadsBwaMem } from './modules/alignReadsBwaMem'
 } else if (params.aligner == 'bwa-aln') {
     include { alignReadsBwaAln } from './modules/alignReadsBwaAln'
+} else if (params.aligner == 'bowtie2') {
+    include { bowtie2Index } from './modules/bowtie2Index'
+    include { alignReadsBowtie2 } from './modules/alignReadsBowtie2'
 } else {
     error "Unsupported aligner: ${params.aligner}. Please specify 'bwa-mem' or 'bwa-aln'."
 }
@@ -91,7 +94,7 @@ workflow {
         // Extract sample ID from first column
         def sample_id = row[0]
 
-        // Take first read column (R1), trimming spaces.
+        // Take first read column (R1), trimming spaces
         def r1_path = row[1]?.trim()
         // Take second read column (R2) if it exists, trimming spaces. If single-end then becomes null
         def r2_path = row.size() > 2 ? row[2]?.trim() : null
@@ -120,14 +123,30 @@ workflow {
         FASTQC(read_pairs_ch)
     }
 
-    return 
+    // Set up channel for alignment based on whether fastp was run
+
+    // Start with original read pairs channel
+    reads_for_alignment_ch = read_pairs_ch
+    // If fastp enabled, use fastp output (only trimmed reads channel, not html or json)
+    if (params.fastp) {
+        reads_for_alignment_ch = fastp.out.trimmed_reads
+    }
+    reads_for_alignment_ch.view { sample_id, reads -> "Sample: $sample_id | Reads: $reads" }
 
     // Align reads to the indexed genome
     if (params.aligner == 'bwa-mem') {
-        align_ch = alignReadsBwaMem(read_pairs_ch, indexed_genome_ch.collect())
+        align_ch = alignReadsBwaMem(reads_for_alignment_ch, indexed_genome_ch.collect())
     } else if (params.aligner == 'bwa-aln') {
-        align_ch = alignReadsBwaAln(read_pairs_ch, indexed_genome_ch.collect())
+        align_ch = alignReadsBwaAln(reads_for_alignment_ch, indexed_genome_ch.collect())
+    } else if (params.aligner == 'bowtie2') {
+        // Retrieve the fasta reference file for bowtie2 index building
+        fasta_ch = Channel.fromPath(params.genome_file)
+        // Build Bowtie2 index
+        bowtie2Index(fasta_ch)
+        // Set up align_ch with Bowtie2 output, using the generated Bowtie index files
+        align_ch = alignReadsBowtie2(reads_for_alignment_ch, bowtie2Index.out.bowtie2_index)
     }
+
 
     // Sort BAM files
     sort_ch = sortBam(align_ch)
