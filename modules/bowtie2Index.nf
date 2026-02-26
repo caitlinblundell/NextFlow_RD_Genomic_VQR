@@ -24,8 +24,7 @@ process bowtie2Index {
     script:
 
     //Compute index basename
-    
-    def indexBasename = referenceFasta.baseName
+    indexBasename = referenceFasta.baseName
 
     """
     echo "Building bowtie2 index for reference genome ${referenceFasta}"

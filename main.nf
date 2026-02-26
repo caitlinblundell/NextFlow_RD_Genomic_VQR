@@ -62,6 +62,8 @@ if (params.aligner == 'bwa-mem') {
 }
 if (params.variant_caller == 'haplotype-caller') {
     include { haplotypeCaller } from './modules/haplotypeCaller'
+} else if (params.variant_caller == 'freeBayes') {
+    include { freeBayes } from './modules/freeBayes'
 } else {
     error "Unsupported variant caller: ${params.variant_caller}. Please specify 'haplotype-caller'."
 }
@@ -147,7 +149,6 @@ workflow {
         align_ch = alignReadsBowtie2(reads_for_alignment_ch, bowtie2Index.out.bowtie2_index)
     }
 
-
     // Sort BAM files
     sort_ch = sortBam(align_ch)
 
@@ -182,9 +183,14 @@ workflow {
         bqsr_ch = mapDamage_ch
     }
 
-    // Run HaplotypeCaller on BQSR files
+    // Run HaplotypeCaller on BQSR files if chosen as variant caller
     if (params.variant_caller == "haplotype-caller") {
         gvcf_ch = haplotypeCaller(bqsr_ch, indexed_genome_ch.collect()).collect()
+    }
+
+    // Run freeBayes on BQSR files if chosen as variant caller
+    if (params.variant_caller == "freeBayes") {
+        freeBayes_ch = freeBayes(bqsr_ch, indexed_genome_ch.collect()).collect()
     }
 
     // Now we map to create separate lists for sample IDs, VCF files, and index files
