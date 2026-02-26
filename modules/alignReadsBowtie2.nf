@@ -21,7 +21,11 @@ process convertSAM {
     script:
     """
     echo "Converting SAM to BAM for ${alignedSAM}"
-    samtools view -b ${alignedSAM} -o ${sample_id}_aligned.bam
+    samtools view -b ${alignedSAM} | \
+    samtools addreplacerg \
+    -r "@RG\tID:${sample_id}\tSM:${sample_id}\tPL:illumina" \
+    - \
+    -o ${sample_id}_aligned.bam
     """
 
 }
