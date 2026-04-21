@@ -58,7 +58,7 @@ if (params.aligner == 'bwa-mem') {
     include { bowtie2Index } from './modules/bowtie2Index'
     include { alignReadsBowtie2 } from './modules/alignReadsBowtie2'
 } else {
-    error "Unsupported aligner: ${params.aligner}. Please specify 'bwa-mem' or 'bwa-aln'."
+    error "Unsupported aligner: ${params.aligner}. Please specify 'bwa-mem' or 'bwa-aln' or 'bowtie2'."
 }
 if (params.variant_caller == 'haplotype-caller') {
     include { haplotypeCaller } from './modules/haplotypeCaller'
@@ -182,12 +182,8 @@ workflow {
         gvcf_ch = haplotypeCaller(bqsr_ch, indexed_genome_ch.collect()).collect()
     }
 
-    // Run freeBayes on BQSR files if chosen as variant caller
-    if (params.variant_caller == "freeBayes") {
-        freeBayes_ch = freeBayes(bqsr_ch, indexed_genome_ch.collect()).collect()
-    }
 
-    // Now we map to create separate lists for sample IDs, VCF files, and index files
+    // Now we m ap to create separate lists for sample IDs, VCF files, and index files
     all_gvcf_ch = gvcf_ch
         .collect { listOfTuples ->
             def sample_ids = listOfTuples.collate(3).collect { it[0] }   // Collect sample IDs from every 3rd element
