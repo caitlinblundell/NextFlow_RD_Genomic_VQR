@@ -118,24 +118,18 @@ workflow {
     // Run fastp on read pairs
     if (params.fastp) {
         fastp(read_pairs_ch)
+        reads_for_alignment_ch = fastp.out.trimmed_reads
+    } else {
+        reads_for_alignment_ch = read_pairs_ch
     }
 
     // Run FASTQC on read pairs
     if (params.fastqc) {
-        FASTQC(read_pairs_ch)
+        FASTQC(reads_for_alignment_ch)
     }
-
-    // Set up channel for alignment based on whether fastp was run
-
-    // Start with original read pairs channel
-    reads_for_alignment_ch = read_pairs_ch
-    // If fastp enabled, use fastp output (only trimmed reads channel, not html or json)
-    if (params.fastp) {
-        reads_for_alignment_ch = fastp.out.trimmed_reads
-    }
-    reads_for_alignment_ch.view { sample_id, reads -> "Sample: $sample_id | Reads: $reads" }
 
     // Align reads to the indexed genome
+       reads_for_alignment_ch.view { sample_id, reads -> "Sample: $sample_id | Reads: $reads" }
     if (params.aligner == 'bwa-mem') {
         align_ch = alignReadsBwaMem(reads_for_alignment_ch, indexed_genome_ch.collect())
     } else if (params.aligner == 'bwa-aln') {
